@@ -2,19 +2,30 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"time"
-	"flag"
 )
 
-const host = "jedi.ydns.eu"
+const (
+	host   = "jedi.ydns.eu"
+	logDir = "/var/www/htdocs/jedi.ydns.eu/log"
+)
 
 func main() {
+	stdoutLog, stderrLog, err := setupLogging(logDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Lokitiedostojen alustus epäonnistui:", err)
+		os.Exit(1)
+	}
+	defer stdoutLog.Close()
+	defer stderrLog.Close()
 
 	var verbose bool
 
@@ -77,6 +88,28 @@ func main() {
 	}
 
 	fmt.Println("YDNS-päivityspyyntö tehty.")
+}
+
+func setupLogging(dir string) (*os.File, *os.File, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, nil, err
+	}
+
+	stdoutLog, err := os.OpenFile(filepath.Join(dir, "ydns.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stderrLog, err := os.OpenFile(filepath.Join(dir, "ydns.err"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		stdoutLog.Close()
+		return nil, nil, err
+	}
+
+	os.Stdout = stdoutLog
+	os.Stderr = stderrLog
+
+	return stdoutLog, stderrLog, nil
 }
 
 func updateYDNS(hostname, ip string) error {
